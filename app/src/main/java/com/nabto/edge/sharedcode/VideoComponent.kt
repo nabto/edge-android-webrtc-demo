@@ -229,7 +229,6 @@ class VideoComponent(
         peer.addTrack(videoTrack)
 
 
-        //
         val constraints = MediaConstraints()
         constraints.mandatory.addAll(
             listOf(
@@ -255,5 +254,11 @@ class VideoComponent(
             }
         }
         peer.createOffer(offerObserver, constraints)
+    }
+
+    fun stop() {
+        // @TODO: Check if peer and deviceStream are actually open before calling close.
+        peer.close()
+        deviceStream.closeCallback { _, _ -> }
     }
 }

@@ -15,6 +15,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavOptions
 import androidx.navigation.fragment.NavHostFragment.Companion.findNavController
 import androidx.navigation.fragment.findNavController
 import com.amplifyframework.auth.AuthException
@@ -150,7 +151,11 @@ class LoginFragment : Fragment() {
                         loadingProgressBar.visibility = View.GONE
                         when (loginResult) {
                             is LoginResult.Success -> {
-                                findNavController().navigate(AppRoute.home())
+                                findNavController().navigate(
+                                    AppRoute.home(),
+                                    NavOptions.Builder().setPopUpTo(findNavController().graph.startDestinationId, true).build()
+                                )
+
                             }
 
                             is LoginResult.Error -> {

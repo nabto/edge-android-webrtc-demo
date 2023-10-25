@@ -37,8 +37,8 @@ object AppConfig {
 
     /** Cognito userpool config */
     const val COGNITO_REGION = "eu-west-1"
-    const val COGNITO_POOL_ID = "eu-west-1_Xbhaoanxz"
-    const val COGNITO_APP_CLIENT_ID = "5jcc2gjesirk155lh8u2ikf94r"
+    const val COGNITO_POOL_ID = "eu-west-1_yaALYWqtM"
+    const val COGNITO_APP_CLIENT_ID = "58kbjihv7mq5tdutlm09ktkd9c"
     const val COGNITO_WEB_DOMAIN = "as-oauth-example.auth.eu-west-1.amazoncognito.com"
 }
 

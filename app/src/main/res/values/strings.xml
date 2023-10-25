@@ -11,7 +11,7 @@
     <string name="username">Username</string>
     <string name="friendly_device_name">Friendly Device Name</string>
     <string name="pair_device_button">pair with device</string>
-    <string name="pair_device_form_info">Fill in a username and a friendly name that the device will be remembered by.\n\nUsername should only contain plain lowercase letters.</string>
+    <string name="pair_device_form_info">Fill in a username and password for Local Initial pairing, and a friendly name to remember the device by.\n\nUsername should only contain plain lowercase letters.</string>
     <string name="pair_device_failed_username_exists">Failed to pair, username already taken!</string>
     <string name="device_page_device_information">Device information</string>
     <string name="name">Name</string>

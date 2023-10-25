@@ -21,6 +21,7 @@ import com.nabto.edge.client.NabtoNoChannelsException
 import com.nabto.edge.client.NabtoRuntimeException
 import com.nabto.edge.iamutil.*
 import com.nabto.edge.iamutil.ktx.*
+import com.nabto.edge.sharedcode.databinding.FragmentPairDeviceBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,37 +49,37 @@ private sealed class PairingResult {
     /**
      * The device's app name does not match what was expected
      */
-    object FailedIncorrectApp : PairingResult()
+    data object FailedIncorrectApp : PairingResult()
 
     /**
      * The chosen username is already registered with the device.
      */
-    object FailedUsernameExists : PairingResult()
+    data object FailedUsernameExists : PairingResult()
 
     /**
      * The available pairing modes on the device are not supported.
      */
-    object FailedInvalidPairingMode : PairingResult()
+    data object FailedInvalidPairingMode : PairingResult()
 
     /**
      * Attempted an open password pairing but no password was provided.
      */
-    object FailedNoPassword : PairingResult()
+    data object FailedNoPassword : PairingResult()
 
     /**
      * @TODO: FailedNoChannels with the current setup will never be used, see SC-1744
      */
-    object FailedNoChannels : PairingResult()
+    data object FailedNoChannels : PairingResult()
 
     /**
      * Coroutine was somehow cancelled during pairing
      */
-    object FailedCoroutineCancelled : PairingResult()
+    data object FailedCoroutineCancelled : PairingResult()
 
     /**
      * Device was disconnected during pairing
      */
-    object FailedDeviceDisconnected : PairingResult()
+    data object FailedDeviceDisconnected : PairingResult()
 
     /**
      * Device failed to connect for pairing.
@@ -88,7 +89,7 @@ private sealed class PairingResult {
     /**
      * Device connection closed during pairing.
      */
-    object FailedDeviceClosed : PairingResult()
+    data object FailedDeviceClosed : PairingResult()
 
     /**
      * Pairing failed for some other reason.
@@ -103,26 +104,19 @@ private sealed class PairingResult {
 private class PairDeviceViewModel(
     private val manager: NabtoConnectionManager,
     private val device: Device
-    ) : ViewModel() {
+) : ViewModel() {
     private val TAG = "PairDeviceViewModel"
-    private var password = ""
     private lateinit var listener: ConnectionEventListener
     private lateinit var handle: ConnectionHandle
     private val iam = IamUtil.create()
     private var observer: Observer<NabtoConnectionState>? = null
 
+    // @TODO: Switch to using a SharedFlow
     private val _pairingResult = MutableLiveData<PairingResult>()
-    val pairingResult: LiveData<PairingResult>
-        get() = _pairingResult
-
-    private suspend fun passwordAuthenticate(pw: String) {
-        password = pw
-        withContext(Dispatchers.IO) {
-            manager.getConnection(handle).passwordAuthenticate("", password)
-        }
-    }
+    val pairingResult: LiveData<PairingResult> get() = _pairingResult
 
     private suspend fun isCurrentUserPaired(): Boolean {
+        // @TODO: Check if oauth subject is already recognized.
         return iam.awaitIsCurrentUserPaired(manager.getConnection(handle))
     }
 
@@ -151,16 +145,6 @@ private class PairDeviceViewModel(
         }
     }
 
-    private suspend fun pairLocalOpen(desiredUsername: String, friendlyDeviceName: String): Device? {
-        iam.awaitPairLocalOpen(manager.getConnection(handle), desiredUsername)
-        return getDeviceDetails(friendlyDeviceName)
-    }
-
-    suspend fun pairPasswordOpen(desiredUsername: String, friendlyDeviceName: String): Device? {
-        iam.awaitPairPasswordOpen(manager.getConnection(handle), desiredUsername, password)
-        return getDeviceDetails(friendlyDeviceName)
-    }
-
     suspend fun updateDisplayName(username: String, displayName: String) {
         iam.awaitUpdateUserDisplayName(manager.getConnection(handle), username, displayName)
     }
@@ -169,61 +153,38 @@ private class PairDeviceViewModel(
         viewModelScope.launch {
             try {
                 val pairingDetails = getPairingDetails()
+                /*
                 if (pairingDetails.appName != AppConfig.DEVICE_APP_NAME) {
                     _pairingResult.postValue(PairingResult.FailedIncorrectApp)
                     return@launch
                 }
+                 */
 
                 if (isCurrentUserPaired()) {
                     val dev = getDeviceDetails(friendlyName)
                     if (dev != null) {
                         _pairingResult.postValue(PairingResult.Success(true, dev))
-                        return@launch
                     } else {
                         _pairingResult.postValue(PairingResult.FailedDeviceDisconnected)
                     }
-                }
-
-                val modes = iam.getAvailablePairingModes(manager.getConnection(handle))
-
-                // this list decides which modes will be tried in order
-                val supportedModes = listOf(
-                    PairingMode.PASSWORD_OPEN,
-                    PairingMode.LOCAL_OPEN
-                )
-
-                if (supportedModes.intersect(modes.toSet()).isEmpty()) {
-                    _pairingResult.postValue(PairingResult.FailedInvalidPairingMode)
                     return@launch
                 }
 
-                if (modes.count() == 1 && modes.contains(PairingMode.PASSWORD_OPEN)) {
-                    device.password.ifEmpty {
-                        _pairingResult.postValue(PairingResult.FailedNoPassword)
-                    }
+                val conn = manager.getConnection(handle)
+                val modes = iam.getAvailablePairingModes(conn)
+                val details = iam.awaitGetDeviceDetails(conn)
+                Log.i(TAG, details.modes.joinToString())
+
+                /*
+                if (!modes.contains(PairingMode.LOCAL_INITIAL)) {
+                    _pairingResult.postValue(PairingResult.FailedInvalidPairingMode)
+                    return@launch
                 }
+                iam.awaitPairLocalInitial(manager.getConnection(handle))
+                 */
 
-                var dev: Device? = null
-                for (mode in supportedModes) {
-                    if (dev != null) {
-                        break
-                    }
-
-                    dev = when (mode) {
-                        PairingMode.LOCAL_OPEN -> {
-                            pairLocalOpen(username, friendlyName)
-                        }
-
-                        PairingMode.PASSWORD_OPEN -> {
-                            if (device.password.isNotEmpty()) {
-                                passwordAuthenticate(device.password)
-                                pairPasswordOpen(username, friendlyName)
-                            } else null
-                        }
-
-                        else -> null
-                    }
-                }
+                iam.awaitPairPasswordOpen(manager.getConnection(handle), username, "demoOpenPairing")
+                val dev = getDeviceDetails(friendlyName)
 
                 dev?.let {
                     updateDisplayName(username, displayName)
@@ -246,12 +207,10 @@ private class PairDeviceViewModel(
                 } else {
                     _pairingResult.postValue(PairingResult.Failed(e.errorCode.name))
                 }
-                manager.unsubscribe(handle, listener)
                 manager.releaseHandle(handle)
                 Log.i(TAG, "Attempted pairing failed with $e")
             } catch (e: CancellationException) {
                 _pairingResult.postValue(PairingResult.FailedCoroutineCancelled)
-                manager.unsubscribe(handle, listener)
                 manager.releaseHandle(handle)
             }
         }
@@ -268,9 +227,7 @@ private class PairDeviceViewModel(
         viewModelScope.launch {
             listener = ConnectionEventListener { event, _ ->
                 when (event) {
-                    NabtoConnectionEvent.CONNECTED -> {
-                        // viewModelScope.launch { pairAndUpdateDevice(username, friendlyName, displayName) }
-                    }
+                    NabtoConnectionEvent.CONNECTED -> {}
                     NabtoConnectionEvent.DEVICE_DISCONNECTED -> {
                         _pairingResult.postValue(PairingResult.FailedDeviceDisconnected)
                     }
@@ -287,6 +244,9 @@ private class PairDeviceViewModel(
                     else -> {}
                 }
             }
+
+            // @TODO: Wtf is going on here? Seems to be adding an observer to ensure that
+            //        already connected devices will still call pairAndUpdateDevice.
             handle = manager.requestConnection(device)
             observer = Observer<NabtoConnectionState> {
                 if (it == NabtoConnectionState.CONNECTED) {
@@ -319,7 +279,10 @@ private class PairDeviceViewModel(
  * to the fragment. This can be done with PairingData.makeBundle
  */
 class PairDeviceFragment : Fragment() {
-    private val TAG = "PairDeviceFragment"
+    private val tag = "PairDeviceFragment"
+    private var _binding: FragmentPairDeviceBinding? = null
+    private val binding get() = _binding ?: throw IllegalStateException("$tag binding is not yet initialized.")
+
     private val repo: NabtoRepository by inject()
     private val database: DeviceDatabase by inject()
     private val manager: NabtoConnectionManager by inject()
@@ -329,7 +292,7 @@ class PairDeviceFragment : Fragment() {
                 productId = it.getString("productId") ?: "",
                 deviceId = it.getString("deviceId") ?: "",
                 password = it.getString("password") ?: "",
-                SCT = it.getString("sct") ?: ""
+                SCT = "demosct" // @TODO: Make this a bundle argument
             )
         }
         PairDeviceViewModelFactory(manager, device)
@@ -340,13 +303,15 @@ class PairDeviceFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View? {
         // Inflate the layout for this fragment
-        return inflater.inflate(R.layout.fragment_pair_device, container, false)
+        _binding = FragmentPairDeviceBinding.inflate(inflater, container, false)
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val button = view.findViewById<Button>(R.id.complete_pairing)
+        //val button = view.findViewById<Button>(R.id.complete_pairing)
+        val button = binding.completePairing
 
         model.pairingResult.observe(viewLifecycleOwner, Observer { result ->
             val snack = when (result) {
@@ -384,7 +349,7 @@ class PairDeviceFragment : Fragment() {
             view.snack(snack)
             when (result) {
                 is PairingResult.Success -> {
-                    findNavController().navigateAndPopUpToRoute(AppRoute.home(), true)
+                    findNavController().navigate(AppRoute.home())
                 }
                 is PairingResult.FailedUsernameExists -> { button.isEnabled = true }
                 else -> { findNavController().popBackStack() }

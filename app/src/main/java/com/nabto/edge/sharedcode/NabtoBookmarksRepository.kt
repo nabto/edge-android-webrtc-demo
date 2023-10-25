@@ -13,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,10 +44,10 @@ data class CloudDevice(
     val id: String,
     val owner: String,
     val name: String,
-    val type: String,
     val nabtoProductId: String,
     val nabtoDeviceId: String,
-    val nabtoSCT: String?
+    val nabtoSct: String?,
+    val fingerprint: String
 )
 
 interface NabtoBookmarksRepository {
@@ -60,6 +62,11 @@ interface NabtoBookmarksRepository {
     fun releaseAllExcept(devices: List<Device>)
 
     fun releaseAll()
+}
+
+private sealed class FlowMessage {
+    class DeviceList(val list: List<Device>): FlowMessage()
+    class User(val user: LoggedInUser?): FlowMessage()
 }
 
 class NabtoBookmarksRepositoryImpl(
@@ -78,6 +85,8 @@ class NabtoBookmarksRepositoryImpl(
     private val status = ConcurrentHashMap<Device, BookmarkStatus>()
     private val jobs = mutableMapOf<Device, Job>()
 
+    private var databaseDevices= listOf<Device>()
+    private var cloudDevices = listOf<Device>()
     private var devices: List<Device> = listOf()
     private var isSynchronized = false
 
@@ -87,36 +96,36 @@ class NabtoBookmarksRepositoryImpl(
 
     init {
         scope.launch {
-            database.deviceDao().getAll().collect {
-                releaseAllExcept(it)
-                devices = it
+            val dbFlow = database.deviceDao().getAll().map { FlowMessage.DeviceList(it) }
+            val userFlow = provider.loggedInUserFlow.map { FlowMessage.User(it) }
+            val flow = merge(dbFlow, userFlow)
 
+            flow.collect { msg ->
+                when (msg) {
+                    is FlowMessage.DeviceList -> {
+                        databaseDevices = msg.list
+                    }
+
+                    is FlowMessage.User -> {
+                        if (msg.user != null) {
+                            val devs = getDevicesFromCloudService().map {
+                                Device(
+                                    productId = it.nabtoProductId,
+                                    deviceId = it.nabtoDeviceId,
+                                    fingerprint = it.fingerprint,
+                                    SCT = it.nabtoSct ?: "demosct",
+                                    friendlyName = it.name
+                                )
+                            }
+
+                            cloudDevices = devs
+                        }
+                    }
+                }
+
+                devices = databaseDevices + cloudDevices
                 if (isSynchronized) {
                     startDeviceConnections()
-                }
-            }
-        }
-
-        scope.launch {
-            provider.loggedInUserFlow.collect { user ->
-                if (user != null) {
-                    val cloudDevices = getDevicesFromCloudService()
-                    val devs = cloudDevices.map {
-                        Device(
-                            productId = it.nabtoProductId,
-                            deviceId = it.nabtoDeviceId,
-                            // @TODO: Fingerprint and demosct are hardcoded atm
-                            fingerprint = "d53fa94654902222d2b06e5375a290ff958fe2e13ecb384dde4edd8c5a2a242f",
-                            SCT = "demosct",
-                            friendlyName = it.name
-                        )
-                    }
-                    devices = devs
-                    if (isSynchronized) {
-                        startDeviceConnections()
-                    }
-                } else {
-                    // releaseAll()
                 }
             }
         }
@@ -138,6 +147,7 @@ class NabtoBookmarksRepositoryImpl(
                     listOf<CloudDevice>()
                 } else {
                     val body = response.body.string()
+                    Log.i(TAG, body);
                     json.decodeFromString<List<CloudDevice>>(body)
                 }
             }

@@ -3,12 +3,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_home"
+    app:route="home"
     app:startDestination="@id/homeFragment">
     <fragment
         android:id="@+id/homeFragment"
         android:name="com.nabto.edge.sharedcode.HomeFragment"
         android:label="@string/title_home"
-        app:route="home"
         tools:layout="@layout/fragment_home" >
     </fragment>
 </navigation>

@@ -79,6 +79,7 @@ fun Fragment.clearFocusAndHideKeyboard() {
  * slightly hacky alternative here.
  */
 fun NavController.navigateAndPopUpToRoute(route: String, inclusive: Boolean = false) {
+    Log.i("NavController", backQueue.map{ it.destination.route }.joinToString())
     val entry = backQueue.last { it.destination.route == route }
     val id = entry.destination.id
     navigate(route, navOptions {

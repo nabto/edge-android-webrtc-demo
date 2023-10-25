@@ -272,7 +272,7 @@ class NabtoConnectionManagerImpl(
                     try {
                         conn.awaitConnect()
                     } catch (e: Exception) {
-                        Log.i(TAG, "Failed to connect, $e")
+                        Log.i(TAG, "Failed to connect, $e : ${e.cause}")
                         withContext(Dispatchers.Main) {
                             when (e) {
                                 is NabtoNoChannelsException -> publish(
@@ -373,6 +373,7 @@ class NabtoConnectionManagerImpl(
             publish(data, NabtoConnectionEvent.CLOSED, handle)
             scope.launch(singleDispatcher){
                 try {
+                    data.subscribers.clear()
                     data.connection?.removeConnectionEventsListener(data.connectionEventsCallback)
                     data.connection?.close()
                 } catch (e: NabtoRuntimeException) {

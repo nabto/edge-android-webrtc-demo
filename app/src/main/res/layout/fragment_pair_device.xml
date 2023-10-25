@@ -61,6 +61,19 @@
                 android:textColorHint="#757575"/>
 
             <EditText
+                android:id="@+id/pair_device_password"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:hint="Password"
+                android:inputType="textPassword"
+                android:minHeight="48dp"
+                android:selectAllOnFocus="true"
+                android:importantForAutofill="no"
+                android:textColorHint="#757575"/>
+
+            <EditText
                 android:id="@+id/pair_device_friendlyname"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
