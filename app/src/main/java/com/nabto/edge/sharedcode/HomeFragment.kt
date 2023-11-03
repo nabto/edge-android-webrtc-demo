@@ -42,36 +42,12 @@ private object DeviceMenu {
  * RecyclerView Adapter for updating the views per item in the list.
  */
 class DeviceListAdapter(val context: Context) : RecyclerView.Adapter<DeviceListAdapter.ViewHolder>() {
-    class ViewHolder(val view: View, val context: Context) : RecyclerView.ViewHolder(view), View.OnCreateContextMenuListener{
+    class ViewHolder(val view: View, val context: Context) : RecyclerView.ViewHolder(view) {
         lateinit var device: Device
         val title: TextView = view.findViewById(R.id.home_device_item_title)
         val status: TextView = view.findViewById(R.id.home_device_item_subtitle)
         val connectionStatusView: ImageView = view.findViewById(R.id.home_device_item_connection)
         val progressBar: CircularProgressIndicator = view.findViewById(R.id.home_device_item_loading)
-
-        init {
-            view.setOnCreateContextMenuListener(this)
-        }
-
-        override fun onCreateContextMenu(
-            menu: ContextMenu?,
-            v: View?,
-            menuInfo: ContextMenu.ContextMenuInfo?
-        ) {
-            val onEdit = MenuItem.OnMenuItemClickListener {
-                v?.findFragment<HomeFragment>()?.onDeviceMenuClick(device, it.itemId)
-                true
-            }
-
-            val items = listOf(
-                menu?.add(Menu.NONE, DeviceMenu.EDIT, 1, context.getString(R.string.home_edit_friendly_name)),
-                menu?.add(Menu.NONE, DeviceMenu.DELETE, 2, context.getString(R.string.home_remove_device))
-            )
-
-            for (it in items) {
-                it?.setOnMenuItemClickListener(onEdit)
-            }
-        }
     }
 
     private var dataSet: List<DeviceBookmark> = listOf()
@@ -131,6 +107,7 @@ class DeviceListAdapter(val context: Context) : RecyclerView.Adapter<DeviceListA
 class HomeFragment : Fragment(), MenuProvider {
     private val TAG = javaClass.simpleName
 
+    private val manager: NabtoConnectionManager by inject()
     private val database: DeviceDatabase by inject()
     private val bookmarks: NabtoBookmarksRepository by inject()
 
@@ -152,16 +129,26 @@ class HomeFragment : Fragment(), MenuProvider {
         recycler.adapter = deviceListAdapter
         recycler.layoutManager = layoutManager
 
+        /*
         view.findViewById<Button>(R.id.home_pair_new_button).setOnClickListener {
             requireAppActivity().navigateToPairing()
         }
+         */
+        view.findViewById<Button>(R.id.home_pair_new_button).visibility = View.GONE
 
-        bookmarks.getDevices().observe(viewLifecycleOwner, Observer { devices ->
-            deviceListAdapter.submitDeviceList(devices)
-            view.findViewById<View>(R.id.home_empty_layout).visibility =
-                if (devices.isEmpty()) View.VISIBLE else View.GONE
-            recycler.visibility = if (devices.isEmpty()) View.GONE else View.VISIBLE
-        })
+
+        lifecycleScope.launch {
+            whenResumed {
+                bookmarks.getDevices().collect { devices ->
+                    if (devices != null) {
+                        deviceListAdapter.submitDeviceList(devices)
+                        view.findViewById<View>(R.id.home_empty_layout).visibility =
+                            if (devices.isEmpty()) View.VISIBLE else View.GONE
+                        recycler.visibility = if (devices.isEmpty()) View.GONE else View.VISIBLE
+                    }
+                }
+            }
+        }
 
         val dividerItemDecoration = DividerItemDecoration(
             recycler.context,
@@ -173,19 +160,23 @@ class HomeFragment : Fragment(), MenuProvider {
 
     override fun onResume() {
         super.onResume()
-        bookmarks.synchronize()
+        bookmarks.refresh()
     }
 
     fun onDeviceClick(device: Device) {
         val status = bookmarks.getStatus(device)
         if (status == BookmarkStatus.UNPAIRED) {
-            bookmarks.releaseAll()
+            bookmarks.release()
             findNavController().navigate(AppRoute.pairDevice(device.productId, device.deviceId))
         } else if (status == BookmarkStatus.WRONG_FINGERPRINT) {
             view?.snack("Fingerprint is different from expected! Please delete and redo pairing if this is deliberate.")
-        } else {
-            bookmarks.releaseAllExcept(listOf(device))
+        } else if (status == BookmarkStatus.ONLINE) {
+            bookmarks.releaseExcept(setOf(device))
             findNavController().navigate(AppRoute.appDevicePage(device.productId, device.deviceId))
+        } else {
+            view?.snack("Device is offline. Attempting refresh.")
+            // @TODO: send us into the device page if the connection succeeds.
+            manager.connect(manager.requestConnection(device))
         }
     }
 
@@ -195,58 +186,9 @@ class HomeFragment : Fragment(), MenuProvider {
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
         if (menuItem.itemId == R.id.action_device_refresh) {
-            bookmarks.reconnect()
+            bookmarks.refresh()
             return true
         }
         return false
-    }
-
-    fun onDeviceMenuClick(device: Device, id: Int) {
-        when (id) {
-            DeviceMenu.EDIT -> {
-                AlertDialog.Builder(context).apply {
-                    val et = EditText(context)
-                    et.setText(device.friendlyName)
-                    setTitle(R.string.home_edit_friendly_name)
-                    setView(et)
-
-                    setPositiveButton(getString(R.string.confirm)) { _, _ ->
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            val dao = database.deviceDao()
-                            dao.insertOrUpdate(device.copy(
-                                friendlyName = et.text.toString()
-                            ))
-                        }
-                    }
-
-                    setNegativeButton(getString(R.string.cancel)) { _, _ ->
-
-                    }
-
-                    create()
-                    show()
-                }
-            }
-
-            DeviceMenu.DELETE -> {
-                AlertDialog.Builder(context).apply {
-                    setTitle(R.string.home_remove_device)
-                    setMessage(getString(R.string.home_delete_dialog_message, device.friendlyName))
-
-                    setPositiveButton(getString(R.string.confirm)) { _, _ ->
-                        view?.snack(getString(R.string.home_delete_device_snack, device.friendlyName))
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            val dao = database.deviceDao()
-                            dao.delete(device)
-                        }
-                    }
-
-                    setNegativeButton(getString(R.string.cancel)) { _, _ -> }
-
-                    create()
-                    show()
-                }
-            }
-        }
     }
 }

@@ -55,6 +55,7 @@ class AppSettingsFragment : PreferenceFragmentCompat() {
                 dialogMessage = getString(R.string.settings_display_name_dialog_message)
             },
 
+            /*
             ConfirmDialogPreference(context).apply {
                 key = resetDatabaseKey
                 title = getString(R.string.reset_database_title)
@@ -71,6 +72,7 @@ class AppSettingsFragment : PreferenceFragmentCompat() {
                     }
                 }
             },
+             */
 
             ConfirmDialogPreference(context).apply {
                 key = resetPrivateKeyKey

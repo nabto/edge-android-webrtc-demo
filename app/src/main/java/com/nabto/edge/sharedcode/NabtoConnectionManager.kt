@@ -242,6 +242,8 @@ class NabtoConnectionManagerImpl(
             NabtoConnectionEvent.PAUSED,
             NabtoConnectionEvent.UNPAUSED -> NabtoConnectionState.CONNECTED
         }
+
+        Log.i(TAG, "${handle.productId}.${handle.deviceId} [event: ${event.name}] [state: ${data?.state?.get()} ==> ${state}]")
         data?.stateLiveData?.postValue(state)
         data?.state?.set(state)
 
@@ -298,7 +300,6 @@ class NabtoConnectionManagerImpl(
         val handle = ConnectionHandle(device.productId, device.deviceId, this)
         if (connectionMap.containsKey(handle)) {
             // there is already an existing connection, just return the handle as-is
-            Log.i(TAG, "Requested connection for ${device.deviceId} but a connection already exists")
             connectionMap[handle]?.options?.apply {
                 ServerConnectToken = device.SCT
             }

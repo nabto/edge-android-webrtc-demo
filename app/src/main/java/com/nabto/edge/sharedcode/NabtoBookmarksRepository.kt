@@ -3,19 +3,16 @@ package com.nabto.edge.sharedcode
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.Observer
 import androidx.lifecycle.asFlow
 import com.nabto.edge.iamutil.IamException
 import com.nabto.edge.iamutil.IamUtil
-import com.nabto.edge.iamutil.ktx.awaitIsCurrentUserPaired
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -24,7 +21,6 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentMap
 
 enum class BookmarkStatus {
     ONLINE,
@@ -51,17 +47,13 @@ data class CloudDevice(
 )
 
 interface NabtoBookmarksRepository {
-    fun getDevices(): LiveData<List<DeviceBookmark>>
+    fun getDevices(): Flow<List<DeviceBookmark>?>
 
     fun getStatus(device: Device): BookmarkStatus
 
-    fun synchronize()
-
-    fun reconnect()
-
-    fun releaseAllExcept(devices: List<Device>)
-
-    fun releaseAll()
+    fun release()
+    fun releaseExcept(devices: Set<Device>)
+    fun refresh()
 }
 
 private sealed class FlowMessage {
@@ -77,18 +69,16 @@ class NabtoBookmarksRepositoryImpl(
 ): NabtoBookmarksRepository {
     private val TAG = NabtoBookmarksRepository::class.java.simpleName
 
-    private val _deviceList = MutableLiveData<List<DeviceBookmark>>()
-    val deviceList: LiveData<List<DeviceBookmark>>
-        get() = _deviceList
+    private val _deviceFlow = MutableStateFlow<List<DeviceBookmark>?>(null)
 
-    private val connections = ConcurrentHashMap<Device, ConnectionHandle>()
-    private val status = ConcurrentHashMap<Device, BookmarkStatus>()
-    private val jobs = mutableMapOf<Device, Job>()
+    data class BookmarkData(
+        val handle: ConnectionHandle,
+        var status: BookmarkStatus,
+        val job: Job
+    )
 
-    private var databaseDevices= listOf<Device>()
-    private var cloudDevices = listOf<Device>()
-    private var devices: List<Device> = listOf()
-    private var isSynchronized = false
+    private val bookmarks = mutableMapOf<Device, BookmarkData>()
+    private val updateFlow = MutableStateFlow<List<Device>>(listOf())
 
     private val json = Json { ignoreUnknownKeys = true }
     private val httpClient = OkHttpClient()
@@ -103,32 +93,78 @@ class NabtoBookmarksRepositoryImpl(
             flow.collect { msg ->
                 when (msg) {
                     is FlowMessage.DeviceList -> {
-                        databaseDevices = msg.list
+                        // @TODO: Figure out how to merge cloud devices list together with database devices.
+                        //databaseDevices = msg.list
                     }
 
                     is FlowMessage.User -> {
                         if (msg.user != null) {
-                            val devs = getDevicesFromCloudService().map {
-                                Device(
-                                    productId = it.nabtoProductId,
-                                    deviceId = it.nabtoDeviceId,
-                                    fingerprint = it.fingerprint,
-                                    SCT = it.nabtoSct ?: "demosct",
-                                    friendlyName = it.name
-                                )
-                            }
-
-                            cloudDevices = devs
+                            updateCloudDevices()
                         }
                     }
                 }
+            }
+        }
 
-                devices = databaseDevices + cloudDevices
-                if (isSynchronized) {
-                    startDeviceConnections()
+        scope.launch {
+            updateFlow.collect() { after ->
+                val before = bookmarks.keys
+                val added = after - before
+                val removed = before - after.toSet()
+
+                for (dev in added) {
+                    val handle = manager.requestConnection(dev)
+
+                    val job = scope.launch {
+                        manager.getConnectionState(handle)?.asFlow()?.collect { state ->
+                            bookmarks[dev]?.let { data ->
+                                data.status = when (state) {
+                                    NabtoConnectionState.CLOSED -> BookmarkStatus.OFFLINE
+                                    NabtoConnectionState.CONNECTING -> BookmarkStatus.CONNECTING
+                                    NabtoConnectionState.CONNECTED -> getConnectedStatus(handle, dev)
+                                }
+                            }
+
+                            // update if any device has changed connection state
+                            postBookmarks()
+                        }
+                    }
+
+                    bookmarks[dev] = BookmarkData(
+                        handle = handle,
+                        status = BookmarkStatus.OFFLINE,
+                        job = job
+                    )
+
+                    manager.connect(handle)
+                }
+
+                for (key in removed) {
+                    bookmarks.remove(key)?.let { data ->
+                        manager.releaseHandle(data.handle)
+                    }
+                }
+
+                if (removed.isNotEmpty() || added.isNotEmpty()) {
+                    // update if devices have been added/removed
+                    postBookmarks()
                 }
             }
         }
+    }
+
+    private suspend fun updateCloudDevices() {
+        val devs = getDevicesFromCloudService().map {
+            Device(
+                productId = it.nabtoProductId,
+                deviceId = it.nabtoDeviceId,
+                fingerprint = it.fingerprint,
+                SCT = it.nabtoSct ?: "demosct",
+                friendlyName = it.name
+            )
+        }
+
+        updateFlow.emit(devs)
     }
 
     private suspend fun getDevicesFromCloudService(): List<CloudDevice> {
@@ -154,11 +190,13 @@ class NabtoBookmarksRepositoryImpl(
         }
     }
 
-    private fun postDevices() {
-        val list = devices.map {
-            DeviceBookmark(it, status.getOrDefault(it, BookmarkStatus.OFFLINE))
+    private fun postBookmarks() {
+        scope.launch {
+            val bookmarks = bookmarks.keys.map { dev ->
+                DeviceBookmark(dev, getStatus(dev))
+            }
+            _deviceFlow.emit(bookmarks)
         }
-        _deviceList.postValue(list)
     }
 
     private suspend fun getConnectedStatus(handle: ConnectionHandle, device: Device): BookmarkStatus {
@@ -185,63 +223,35 @@ class NabtoBookmarksRepositoryImpl(
         }
     }
 
-    private fun startDeviceConnections() {
-        for (key in devices) {
-            connections[key] = manager.requestConnection(key)
-            connections[key]?.let { handle ->
-                val job = scope.launch {
-                    manager.getConnectionState(handle)?.asFlow()?.collect {
-                        status[key] = when (it) {
-                            NabtoConnectionState.CLOSED -> BookmarkStatus.OFFLINE
-                            NabtoConnectionState.CONNECTING -> BookmarkStatus.CONNECTING
-                            NabtoConnectionState.CONNECTED -> getConnectedStatus(handle, key)
-                        }
-                        postDevices()
-                    }
-                }
-                jobs[key] = job
-            }
-            connections[key]?.let { manager.connect(it) }
-        }
-        postDevices()
-    }
-
-    override fun getDevices(): LiveData<List<DeviceBookmark>> {
-        return deviceList
+    override fun getDevices(): Flow<List<DeviceBookmark>?> {
+        return _deviceFlow
     }
 
     override fun getStatus(device: Device): BookmarkStatus {
-        return status.getOrDefault(device, BookmarkStatus.OFFLINE)
+        return bookmarks[device]?.status ?: BookmarkStatus.OFFLINE
     }
 
-    override fun synchronize() {
-        isSynchronized = true
-        startDeviceConnections()
-    }
 
-    override fun reconnect() {
-        for ((_, handle) in connections) {
-            manager.connect(handle)
-        }
-    }
-
-    override fun releaseAllExcept(devices: List<Device>) {
-        for ((key, handle) in connections) {
-            if (!devices.contains(key)) {
-                manager.releaseHandle(handle)
-                connections.remove(key)
-                status.remove(key)
-                jobs.remove(key)?.cancel()
+    override fun refresh() {
+        scope.launch {
+            updateCloudDevices()
+            for ((dev, data) in bookmarks) {
+                manager.connect(data.handle)
             }
         }
     }
 
-    override fun releaseAll() {
-        connections.forEach {(_, h) -> manager.releaseHandle(h)}
-        jobs.forEach {(_, v) -> v.cancel()}
-        connections.clear()
-        status.clear()
+    override fun release() {
+        for ((_, data) in bookmarks) {
+            manager.releaseHandle(data.handle)
+        }
     }
-
+    override fun releaseExcept(devices: Set<Device>) {
+        for ((dev, data) in bookmarks) {
+            if (!devices.contains(dev)) {
+                manager.releaseHandle(data.handle)
+            }
+        }
+    }
 }
 

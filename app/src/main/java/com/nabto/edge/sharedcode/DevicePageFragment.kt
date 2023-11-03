@@ -9,9 +9,11 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.asFlow
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.whenResumed
+import androidx.navigation.fragment.findNavController
 import com.nabto.edge.client.Coap
 import io.getstream.webrtc.android.ui.VideoTextureViewRenderer
 import kotlinx.coroutines.Dispatchers
@@ -64,7 +66,20 @@ class DevicePageFragment : Fragment() {
         val conn = manager.getConnection(handle)
         requireAppActivity().actionBarTitle = "" // @TODO: Get device name for the action bar title.
 
-        // @TODO: Navigate back out if connection isnt open.
+        lifecycleScope.launch {
+            whenResumed {
+                manager.getConnectionState(handle)?.asFlow()?.collect { state ->
+                    when (state) {
+                        NabtoConnectionState.CLOSED -> {
+                            findNavController().popBackStack()
+                        }
+                        NabtoConnectionState.CONNECTING -> {}
+                        NabtoConnectionState.CONNECTED -> {}
+                    }
+                }
+            }
+        }
+
         lifecycleScope.launch {
             whenResumed {
                 val serviceUrl = AppConfig.CLOUD_SERVICE_URL
