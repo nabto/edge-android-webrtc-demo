@@ -33,13 +33,13 @@ object AppConfig {
     const val SERVER_KEY = "sk-d8254c6f790001003d0c842d1b63b134"
 
     /** Our cloud service that we get/post info from/to */
-    const val CLOUD_SERVICE_URL = "https://smarthome.as.dev.nabto.com"
+    const val CLOUD_SERVICE_URL = "https://api.smartcloud.nabto.com"
 
     /** Cognito userpool config */
     const val COGNITO_REGION = "eu-west-1"
-    const val COGNITO_POOL_ID = "eu-west-1_FAs7WiRvc"
-    const val COGNITO_APP_CLIENT_ID = "5r8seqd0f5gfk6thfpdvjic6o0"
-    const val COGNITO_WEB_DOMAIN = "as-oauth-example.auth.eu-west-1.amazoncognito.com"
+    const val COGNITO_POOL_ID = "eu-west-1_KuthwhT0c"
+    const val COGNITO_APP_CLIENT_ID = "7quldkc4u45gruefo8ubt16gfu"
+    const val COGNITO_WEB_DOMAIN = "smartcloud.auth.eu-west-1.amazoncognito.com"
 }
 
 private val amplifyJsonString = """

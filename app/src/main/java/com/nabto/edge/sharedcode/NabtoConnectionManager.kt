@@ -326,7 +326,7 @@ class NabtoConnectionManagerImpl(
             DeviceId = device.deviceId,
             ServerKey = AppConfig.SERVER_KEY,
             PrivateKey = repo.getClientPrivateKey(),
-            ServerUrl = "https://${device.productId}.clients.dev.nabto.net",
+            ServerUrl = "https://${device.productId}.clients.nabto.net",
             ServerConnectToken = device.SCT,
             KeepAliveInterval = 2000,
             KeepAliveRetryInterval = 2000,
