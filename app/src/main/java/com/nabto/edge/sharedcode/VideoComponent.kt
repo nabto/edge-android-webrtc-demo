@@ -28,6 +28,7 @@ import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
 import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
+import org.webrtc.PeerConnection.IceServer
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RendererCommon
 import org.webrtc.RtpTransceiver
@@ -57,6 +58,14 @@ data class SDP(
 )
 
 @Serializable
+data class TurnServer(
+    val hostname: String,
+    val port: Int,
+    val username: String,
+    val password: String
+)
+
+@Serializable
 data class MetadataTrack(
     val mid: String,
     val trackId: String
@@ -71,8 +80,9 @@ data class SignalMessageMetadata(
 @Serializable
 data class SignalMessage(
     val type: Int,
-    val data: String?,
-    val metadata: SignalMessageMetadata?
+    val data: String? = null,
+    val servers: List<TurnServer>? = null,
+    val metadata: SignalMessageMetadata? = null
 )
 
 // @TODO: Rename
@@ -116,11 +126,6 @@ class VideoComponent(
     private val scope: CoroutineScope,
 ) : RendererCommon.RendererEvents, PeerConnection.Observer {
     private val tag = this.javaClass.simpleName
-
-    // @TODO: Make iceServers a parameter.
-    private val iceServers = mutableListOf(
-        PeerConnection.IceServer.builder("stun:stun.nabto.net").createIceServer()
-    )
 
     private lateinit var deviceStream: Stream
     private lateinit var peerConnectionFactory: PeerConnectionFactory
@@ -191,12 +196,34 @@ class VideoComponent(
         deviceStream.awaitOpen(rtcInfo.signalingStreamPort)
     }
 
-    // @TODO: Better name for this than just "start"
     suspend fun start() {
         startSignalingStream()
 
         // Init our TextureView with the EGL context
         renderer.init(eglBaseContext, this)
+
+        writeMessage(deviceStream, SignalMessage(
+            type = SignalMessageType.TURN_REQUEST.num,
+        ))
+
+        val turnResponse = readMessage(deviceStream)
+        if (turnResponse.type != SignalMessageType.TURN_RESPONSE.num || turnResponse.servers == null) {
+            // @TODO: Error in a better way than throwing a vague exception
+            throw RuntimeException("Expected turn response but it didn't work! received msg: $turnResponse")
+        }
+        
+        val iceServers = mutableListOf(
+            PeerConnection.IceServer.builder("stun:stun.nabto.net").createIceServer()
+        )
+        for (server in turnResponse.servers) {
+            iceServers.add(
+                IceServer.builder(server.hostname).run {
+                    setUsername(server.username)
+                    setPassword(server.password)
+                    createIceServer()
+                }
+            )
+        }
 
         // THIS PART IS VERY IMPORTANT!
         // We need to specify that we want to use h264 encoding/decoding, otherwise the SDP
@@ -216,8 +243,11 @@ class VideoComponent(
             setVideoDecoderFactory(decoderFactory)
         }.createPeerConnectionFactory()
 
+        val pcOpts = PeerConnection.RTCConfiguration(null)
+        pcOpts.iceServers = iceServers
+
         // We create our PeerConnection.Observer and then our PeerConnection finally.
-        peer = peerConnectionFactory.createPeerConnection(iceServers, this) ?: run {
+        peer = peerConnectionFactory.createPeerConnection(pcOpts, this) ?: run {
             // @TODO: Error in a better way than throwing a vague exception
             throw RuntimeException("Could not create PeerConnection")
         }
@@ -227,7 +257,6 @@ class VideoComponent(
         // @TODO: Should video0 always be the name of the video track?
         val videoTrack = peerConnectionFactory.createVideoTrack("video0", source)
         peer.addTrack(videoTrack)
-
 
         val constraints = MediaConstraints()
         constraints.mandatory.addAll(
@@ -257,7 +286,6 @@ class VideoComponent(
     }
 
     fun stop() {
-        // @TODO: Check if peer and deviceStream are actually open before calling close.
         peer.close()
         deviceStream.closeCallback { _, _ -> }
     }

@@ -55,25 +55,6 @@ class AppSettingsFragment : PreferenceFragmentCompat() {
                 dialogMessage = getString(R.string.settings_display_name_dialog_message)
             },
 
-            /*
-            ConfirmDialogPreference(context).apply {
-                key = resetDatabaseKey
-                title = getString(R.string.reset_database_title)
-                icon = getDrawable(R.drawable.ic_list_remove)
-                summary = getString(R.string.reset_database_summary)
-                dialogTitle = getString(R.string.warning)
-                dialogMessage = getString(R.string.app_settings_database_reset_dialog)
-                onDialogClosed = { confirmed ->
-                    if (confirmed) {
-                        repo.getApplicationScope().launch {
-                            database.deviceDao().deleteAll()
-                        }
-                        view?.snack(getString(R.string.settings_reset_database_snack), Snackbar.LENGTH_SHORT)
-                    }
-                }
-            },
-             */
-
             ConfirmDialogPreference(context).apply {
                 key = resetPrivateKeyKey
                 title = getString(R.string.settings_reset_pk_title)
