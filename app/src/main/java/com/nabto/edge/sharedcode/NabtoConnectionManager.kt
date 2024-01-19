@@ -11,11 +11,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Required
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
@@ -172,10 +170,8 @@ class NabtoConnectionManagerImpl(
     data class ConnectionOptions(
         @Required var ProductId: String,
         @Required var DeviceId: String,
-        @Required var ServerKey: String,
         @Required var PrivateKey: String,
         @Required var ServerConnectToken: String,
-        @Required var ServerUrl: String,
         var KeepAliveInterval: Int,
         var KeepAliveRetryInterval: Int,
         var KeepAliveMaxRetries: Int,
@@ -324,9 +320,7 @@ class NabtoConnectionManagerImpl(
         val options = ConnectionOptions(
             ProductId = device.productId,
             DeviceId = device.deviceId,
-            ServerKey = AppConfig.SERVER_KEY,
             PrivateKey = repo.getClientPrivateKey(),
-            ServerUrl = "https://${device.productId}.clients.dev.nabto.net",
             ServerConnectToken = device.SCT,
             KeepAliveInterval = 2000,
             KeepAliveRetryInterval = 2000,

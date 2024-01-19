@@ -1,5 +1,6 @@
 package com.nabto.edge.sharedcode
 
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -8,25 +9,27 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.whenResumed
 import androidx.navigation.fragment.findNavController
 import com.nabto.edge.client.Coap
-import io.getstream.webrtc.android.ui.VideoTextureViewRenderer
+import com.nabto.edge.client.Connection
+import com.nabto.edge.client.ktx.awaitExecute
+import com.nabto.edge.client.webrtc.EdgeVideoView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.koin.android.ext.android.inject
-import org.webrtc.EglBase
+import com.nabto.edge.client.webrtc.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.lang.ref.WeakReference
 
 @Serializable
 data class NabtoToken(
@@ -36,21 +39,99 @@ data class NabtoToken(
     val issued_token_type: String
 )
 
+enum class DeviceError {
+    NONE,
+    AUTH_FAILED,
+    VIDEO_CALL_FAILED
+}
+
+class DevicePageViewModel : ViewModel() {
+    private val tag = javaClass.simpleName
+    private var stsToken: NabtoToken? = null
+    private lateinit var peerConnection: EdgeWebrtcConnection
+    private lateinit var remoteTrack: EdgeVideoTrack
+
+    private val _errors = MutableStateFlow(DeviceError.NONE)
+    val errors = _errors.asStateFlow()
+
+    private var _videoView: WeakReference<EdgeVideoView> = WeakReference(null)
+    var videoView: EdgeVideoView?
+        get() = _videoView.get()
+        set(value) {
+            _videoView = WeakReference(value)
+        }
+
+    suspend fun authenticate(auth: LoginProvider, productId: String, deviceId: String, conn: Connection) {
+        val serviceUrl = AppConfig.CLOUD_SERVICE_URL
+        val user = auth.getLoggedInUser()
+        val formBody = FormBody.Builder().apply {
+            add("client_id", AppConfig.COGNITO_APP_CLIENT_ID)
+            add("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+            add("subject_token", user.tokenPayload)
+            add("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+            add("resource", "nabto://device?productId=${productId}&deviceId=${deviceId}")
+        }.build()
+        val http = OkHttpClient()
+        val req = Request.Builder().apply {
+            url("$serviceUrl/sts/token")
+            post(formBody)
+        }.build()
+
+        withContext(Dispatchers.IO) {
+            http.newCall(req).execute().use {
+                val body = it.body.string()
+                val json = Json { ignoreUnknownKeys = true }
+                stsToken = json.decodeFromString(body)
+            }
+        }
+
+        val oauthCoap = conn.createCoap("POST", "/webrtc/oauth")
+        oauthCoap?.setRequestPayload(
+            Coap.ContentFormat.TEXT_PLAIN,
+            stsToken?.access_token?.toByteArray()
+        )
+        oauthCoap?.awaitExecute()
+
+        if (oauthCoap?.responseStatusCode != 201) {
+            _errors.emit(DeviceError.AUTH_FAILED)
+        }
+    }
+
+    fun startVideoCall(conn: Connection, context: Context) {
+        peerConnection = EdgeWebRTC.create(conn, context)
+        val connRef = WeakReference(conn)
+
+        peerConnection.onConnected {
+            Log.i(tag, "Connected to peer")
+            val trackInfo = """{"tracks": ["frontdoor-video", "frontdoor-audio"]}"""
+
+            val coap = connRef.get()?.createCoap("POST", "/webrtc/tracks")
+            coap?.setRequestPayload(50, trackInfo.toByteArray())
+            coap?.execute()
+
+            if (coap?.responseStatusCode != 201) {
+                viewModelScope.launch {
+                    _errors.emit(DeviceError.VIDEO_CALL_FAILED)
+                }
+            }
+        }
+
+        peerConnection.onTrack {track ->
+            Log.i(tag, "Track of type ${track.type}")
+            if (track.type == EdgeMediaTrackType.VIDEO) {
+                remoteTrack = track as EdgeVideoTrack
+                videoView?.let { remoteTrack.add(it) }
+            }
+        }
+    }
+}
+
 class DevicePageFragment : Fragment() {
-    private val TAG = javaClass.simpleName
     private val auth: LoginProvider by inject()
     private val productId by lazy { arguments?.getString("productId") ?: "" }
     private val deviceId by lazy { arguments?.getString("deviceId") ?: "" }
     private val manager: NabtoConnectionManager by inject()
-
-    private lateinit var stsToken: NabtoToken
-    private lateinit var rootEglBase: EglBase
-    private lateinit var videoComponent: VideoComponent
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        rootEglBase = EglBase.create()
-    }
+    private val viewModel: DevicePageViewModel by viewModels()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -62,80 +143,39 @@ class DevicePageFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val handle = manager.requestConnection(Device(productId, deviceId))
-        val conn = manager.getConnection(handle)
+        val deviceHandle = manager.requestConnection(Device(productId, deviceId))
+        val videoView = view.findViewById<EdgeVideoView>(R.id.participantVideoRenderer)
+        EdgeWebRTC.initVideoView(videoView)
         requireAppActivity().actionBarTitle = "" // @TODO: Get device name for the action bar title.
 
         lifecycleScope.launch {
-            whenResumed {
-                manager.getConnectionState(handle)?.asFlow()?.collect { state ->
-                    when (state) {
-                        NabtoConnectionState.CLOSED -> {
-                            findNavController().popBackStack()
-                        }
-                        NabtoConnectionState.CONNECTING -> {}
-                        NabtoConnectionState.CONNECTED -> {}
+            manager.getConnectionState(deviceHandle)?.asFlow()?.collect { state ->
+                when (state) {
+                    NabtoConnectionState.CLOSED -> {
+                        findNavController().popBackStack()
                     }
+                    NabtoConnectionState.CONNECTING -> {}
+                    NabtoConnectionState.CONNECTED -> {}
                 }
             }
         }
 
         lifecycleScope.launch {
-            whenResumed {
-                val serviceUrl = AppConfig.CLOUD_SERVICE_URL
-                val user = auth.getLoggedInUser()
-                val formBody = FormBody.Builder().apply {
-                    add("client_id", AppConfig.COGNITO_APP_CLIENT_ID)
-                    add("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
-                    add("subject_token", user.tokenPayload)
-                    add("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
-                    add("resource", "nabto://device?productId=${productId}&deviceId=${deviceId}")
-                }.build()
-                val http = OkHttpClient()
-                val req = Request.Builder().apply {
-                    url("$serviceUrl/sts/token")
-                    post(formBody)
-                }.build()
-
-                withContext(Dispatchers.IO) {
-                    http.newCall(req).execute().use {
-                        val body = it.body.string()
-                        Log.i(tag, "STS token: $body")
-                        val json = Json { ignoreUnknownKeys = true }
-                        stsToken = json.decodeFromString(body)
-                        Log.i(tag, "Decoded STS token: $stsToken")
-                    }
-                }
-
-                val oauthCoap = conn.createCoap("POST", "/webrtc/oauth")
-                oauthCoap.setRequestPayload(
-                    Coap.ContentFormat.TEXT_PLAIN,
-                    stsToken.access_token.toByteArray()
-                )
-                oauthCoap.execute()
-
-                Log.i(tag, "Oauth response code: ${oauthCoap.responseStatusCode}")
-                if (oauthCoap.responseStatusCode == 201) {
-                    val frame =
-                        view.findViewById<VideoTextureViewRenderer>(R.id.participantVideoRenderer)
-                    videoComponent = VideoComponent(
-                        requireContext(),
-                        frame,
-                        rootEglBase.eglBaseContext,
-                        handle,
-                        viewLifecycleOwner.lifecycleScope
-                    )
-                    videoComponent.start()
-                } else {
-                    Log.i(tag, "Failed to perform oauth login")
+            viewModel.errors.collect { error ->
+                when (error) {
+                    DeviceError.NONE -> {}
+                    // @TODO: Return the user to the overview when these errors happen?
+                    DeviceError.AUTH_FAILED -> view.snack("Authentication against central server failed.")
+                    DeviceError.VIDEO_CALL_FAILED -> view.snack("Video stream could not be started.")
                 }
             }
         }
 
-    }
-
-    override fun onStop() {
-        super.onStop()
-        videoComponent.stop()
+        lifecycleScope.launch {
+            val conn = manager.getConnection(deviceHandle)
+            viewModel.videoView = videoView
+            viewModel.authenticate(auth, productId, deviceId, conn)
+            viewModel.startVideoCall(conn, requireContext())
+        }
     }
 }

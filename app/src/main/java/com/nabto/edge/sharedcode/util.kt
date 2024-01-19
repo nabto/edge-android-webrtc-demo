@@ -8,9 +8,12 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
 import androidx.annotation.IdRes
+import androidx.annotation.MainThread
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
 import androidx.navigation.navOptions
 import androidx.preference.DialogPreference
@@ -147,5 +150,14 @@ fun Fragment.requireAppActivity(): AppMainActivity {
         return activity as AppMainActivity
     } else {
         throw IllegalStateException("Activity does not inherit from AppMainActivity.")
+    }
+}
+
+@MainThread
+inline fun <reified T : ViewModel> Fragment.viewModel(noinline initializer: () -> T) = viewModels<T> {
+    viewModelFactory {
+        addInitializer(T::class) {
+            initializer()
+        }
     }
 }
