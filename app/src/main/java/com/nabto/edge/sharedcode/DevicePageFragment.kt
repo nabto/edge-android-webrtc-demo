@@ -97,7 +97,7 @@ class DevicePageViewModel : ViewModel() {
         }
     }
 
-    fun startVideoCall(conn: Connection, context: Context) {
+    fun openVideoStream(conn: Connection, context: Context) {
         peerConnection = EdgeWebRTC.create(conn, context)
         val connRef = WeakReference(conn)
 
@@ -175,7 +175,7 @@ class DevicePageFragment : Fragment() {
             val conn = manager.getConnection(deviceHandle)
             viewModel.videoView = videoView
             viewModel.authenticate(auth, productId, deviceId, conn)
-            viewModel.startVideoCall(conn, requireContext())
+            viewModel.openVideoStream(conn, requireContext())
         }
     }
 }
