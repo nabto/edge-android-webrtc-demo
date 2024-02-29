@@ -97,8 +97,8 @@ class DevicePageViewModel : ViewModel() {
         }
     }
 
-    fun startVideoCall(conn: Connection, context: Context) {
-        peerConnection = EdgeWebRTC.create(conn, context)
+    fun openVideoStream(conn: Connection) {
+        peerConnection = EdgeWebRTCManager.getInstance().createRTCConnection(conn)
         val connRef = WeakReference(conn)
 
         peerConnection.onConnected {
@@ -123,6 +123,16 @@ class DevicePageViewModel : ViewModel() {
                 videoView?.let { remoteTrack.add(it) }
             }
         }
+
+        peerConnection.onError { error ->
+
+        }
+
+        peerConnection.connect()
+    }
+
+    fun closeVideoStream() {
+        peerConnection.close()
     }
 }
 
@@ -145,7 +155,7 @@ class DevicePageFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         val deviceHandle = manager.requestConnection(Device(productId, deviceId))
         val videoView = view.findViewById<EdgeVideoView>(R.id.participantVideoRenderer)
-        EdgeWebRTC.initVideoView(videoView)
+        EdgeWebRTCManager.getInstance().initVideoView(videoView)
         requireAppActivity().actionBarTitle = "" // @TODO: Get device name for the action bar title.
 
         lifecycleScope.launch {
@@ -175,7 +185,12 @@ class DevicePageFragment : Fragment() {
             val conn = manager.getConnection(deviceHandle)
             viewModel.videoView = videoView
             viewModel.authenticate(auth, productId, deviceId, conn)
-            viewModel.startVideoCall(conn, requireContext())
+            viewModel.openVideoStream(conn)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        viewModel.closeVideoStream()
     }
 }
