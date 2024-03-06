@@ -13,6 +13,7 @@ import androidx.lifecycle.asFlow
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.fragment.findNavController
+import com.amplifyframework.auth.AuthException
 import com.nabto.edge.client.Coap
 import com.nabto.edge.client.Connection
 import com.nabto.edge.client.ktx.awaitExecute
@@ -29,6 +30,7 @@ import org.koin.android.ext.android.inject
 import com.nabto.edge.client.webrtc.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.IOException
 import java.lang.ref.WeakReference
 
 @Serializable
@@ -39,10 +41,12 @@ data class NabtoToken(
     val issued_token_type: String
 )
 
-enum class DeviceError {
-    NONE,
-    AUTH_FAILED,
-    VIDEO_CALL_FAILED
+sealed class Error {
+    data object none : Error()
+    data object authFailed : Error()
+    data object notLoggedIn : Error()
+    data object videoCallFailed : Error()
+    data class peerConnectionError(val err: EdgeWebRTCError) : Error()
 }
 
 class DevicePageViewModel : ViewModel() {
@@ -51,7 +55,7 @@ class DevicePageViewModel : ViewModel() {
     private lateinit var peerConnection: EdgeWebrtcConnection
     private lateinit var remoteTrack: EdgeVideoTrack
 
-    private val _errors = MutableStateFlow(DeviceError.NONE)
+    private val _errors = MutableStateFlow<Error>(Error.none)
     val errors = _errors.asStateFlow()
 
     private var _videoView: WeakReference<EdgeVideoView> = WeakReference(null)
@@ -61,9 +65,16 @@ class DevicePageViewModel : ViewModel() {
             _videoView = WeakReference(value)
         }
 
-    suspend fun authenticate(auth: LoginProvider, productId: String, deviceId: String, conn: Connection) {
+    suspend fun authenticate(auth: LoginProvider, productId: String, deviceId: String, conn: Connection): Boolean {
         val serviceUrl = AppConfig.CLOUD_SERVICE_URL
-        val user = auth.getLoggedInUser()
+
+        val user = try {
+            auth.getLoggedInUser()
+        } catch (exception: AuthException) {
+            _errors.emit(Error.notLoggedIn)
+            return false
+        }
+
         val formBody = FormBody.Builder().apply {
             add("client_id", AppConfig.COGNITO_APP_CLIENT_ID)
             add("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
@@ -78,11 +89,19 @@ class DevicePageViewModel : ViewModel() {
         }.build()
 
         withContext(Dispatchers.IO) {
-            http.newCall(req).execute().use {
-                val body = it.body.string()
-                val json = Json { ignoreUnknownKeys = true }
-                stsToken = json.decodeFromString(body)
+            try {
+                http.newCall(req).execute().use {
+                    val body = it.body.string()
+                    val json = Json { ignoreUnknownKeys = true }
+                    stsToken = json.decodeFromString(body)
+                }
+            } catch (exception: IOException) {
+                stsToken = null
             }
+        }
+
+        if (stsToken == null) {
+            return false
         }
 
         val oauthCoap = conn.createCoap("POST", "/webrtc/oauth")
@@ -93,8 +112,11 @@ class DevicePageViewModel : ViewModel() {
         oauthCoap?.awaitExecute()
 
         if (oauthCoap?.responseStatusCode != 201) {
-            _errors.emit(DeviceError.AUTH_FAILED)
+            _errors.emit(Error.authFailed)
+            return false
         }
+
+        return true
     }
 
     fun openVideoStream(conn: Connection) {
@@ -111,7 +133,7 @@ class DevicePageViewModel : ViewModel() {
 
             if (coap?.responseStatusCode != 201) {
                 viewModelScope.launch {
-                    _errors.emit(DeviceError.VIDEO_CALL_FAILED)
+                    _errors.emit(Error.videoCallFailed)
                 }
             }
         }
@@ -125,14 +147,17 @@ class DevicePageViewModel : ViewModel() {
         }
 
         peerConnection.onError { error ->
-
+            viewModelScope.launch {
+                _errors.emit(Error.peerConnectionError(error))
+            }
         }
 
         peerConnection.connect()
     }
 
     fun closeVideoStream() {
-        peerConnection.close()
+        Log.i(tag, "Shutting down peer connection...")
+        peerConnection.connectionClose()
     }
 }
 
@@ -140,7 +165,9 @@ class DevicePageFragment : Fragment() {
     private val auth: LoginProvider by inject()
     private val productId by lazy { arguments?.getString("productId") ?: "" }
     private val deviceId by lazy { arguments?.getString("deviceId") ?: "" }
+    private val deviceName by lazy { bookmarks.getFriendlyName(Device(productId, deviceId)) }
     private val manager: NabtoConnectionManager by inject()
+    private val bookmarks: NabtoBookmarksRepository by inject()
     private val viewModel: DevicePageViewModel by viewModels()
 
     override fun onCreateView(
@@ -156,7 +183,7 @@ class DevicePageFragment : Fragment() {
         val deviceHandle = manager.requestConnection(Device(productId, deviceId))
         val videoView = view.findViewById<EdgeVideoView>(R.id.participantVideoRenderer)
         EdgeWebRTCManager.getInstance().initVideoView(videoView)
-        requireAppActivity().actionBarTitle = "" // @TODO: Get device name for the action bar title.
+        requireAppActivity().actionBarTitle = deviceName
 
         lifecycleScope.launch {
             manager.getConnectionState(deviceHandle)?.asFlow()?.collect { state ->
@@ -173,10 +200,14 @@ class DevicePageFragment : Fragment() {
         lifecycleScope.launch {
             viewModel.errors.collect { error ->
                 when (error) {
-                    DeviceError.NONE -> {}
-                    // @TODO: Return the user to the overview when these errors happen?
-                    DeviceError.AUTH_FAILED -> view.snack("Authentication against central server failed.")
-                    DeviceError.VIDEO_CALL_FAILED -> view.snack("Video stream could not be started.")
+                    is Error.none -> {}
+                    is Error.authFailed -> view.snack("Authentication against central server failed.")
+                    is Error.videoCallFailed -> view.snack("Video stream could not be started.")
+                    is Error.notLoggedIn -> {
+                        view.snack("You are not logged in currently.")
+                        // @TODO: return to login page
+                    }
+                    is Error.peerConnectionError -> view.snack("WebRTC error: ${error.err}")
                 }
             }
         }
@@ -184,8 +215,10 @@ class DevicePageFragment : Fragment() {
         lifecycleScope.launch {
             val conn = manager.getConnection(deviceHandle)
             viewModel.videoView = videoView
-            viewModel.authenticate(auth, productId, deviceId, conn)
-            viewModel.openVideoStream(conn)
+            val authResult = viewModel.authenticate(auth, productId, deviceId, conn)
+            if (authResult) {
+                viewModel.openVideoStream(conn)
+            }
         }
     }
 

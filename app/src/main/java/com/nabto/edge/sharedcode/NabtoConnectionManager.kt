@@ -96,6 +96,14 @@ interface NabtoConnectionManager {
     fun connect(handle: ConnectionHandle)
 
     /**
+     * Disconnects a connection but does not invalidate its handle.
+     * It can be reconnected by using connect()
+     *
+     * @param[handle] The [ConnectionHandle] to disconnect.
+     */
+    fun disconnect(handle: ConnectionHandle)
+
+    /**
      * Release a [ConnectionHandle]. The underlying connection is closed, subscribers are
      * unsubscribed and the handle is invalidated.
      *
@@ -341,7 +349,7 @@ class NabtoConnectionManagerImpl(
     }
 
     // closes the connection but does not release the handle
-    private fun close(handle: ConnectionHandle) {
+    override fun disconnect(handle: ConnectionHandle) {
         connectionMap[handle]?.let { data ->
             if (data.state.get() != NabtoConnectionState.CLOSED) {
                 publish(handle, NabtoConnectionEvent.CLOSED)
@@ -349,7 +357,7 @@ class NabtoConnectionManagerImpl(
                     val conn = data.connection
                     data.connection = null
                     try {
-                        conn?.close()
+                        conn?.connectionClose()
                     } catch (e: NabtoRuntimeException) {
                         if (e.errorCode.errorCode == ErrorCodes.NOT_CONNECTED) {
                             Log.w(TAG, "Tried to close unconnected connection!")
@@ -370,7 +378,7 @@ class NabtoConnectionManagerImpl(
                 try {
                     data.subscribers.clear()
                     data.connection?.removeConnectionEventsListener(data.connectionEventsCallback)
-                    data.connection?.close()
+                    data.connection?.connectionClose()
                 } catch (e: NabtoRuntimeException) {
                     Log.w(TAG, "Attempt to close connection yielded $e")
                 }
@@ -423,7 +431,7 @@ class NabtoConnectionManagerImpl(
     private fun onNetworkAvailable(network: Network) {
         if (connectivityManager.activeNetwork == network && activeNetwork != network)
         {
-            connectionMap.forEach { (handle, _) -> close(handle) }
+            connectionMap.forEach { (handle, _) -> disconnect(handle) }
         }
         activeNetwork = connectivityManager.activeNetwork
 
@@ -434,7 +442,7 @@ class NabtoConnectionManagerImpl(
 
     private fun onNetworkLost(network: Network) {
         connectionMap.forEach { (handle, _) ->
-            close(handle)
+            disconnect(handle)
         }
         activeNetwork = connectivityManager.activeNetwork
     }
@@ -461,7 +469,7 @@ class NabtoConnectionManagerImpl(
                     scope.launch {
                         delay(keepAliveTimeoutSeconds * 1000)
                         if (isAppInBackground) {
-                            close(handle)
+                            disconnect(handle)
                         }
                     }
                 }

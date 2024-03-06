@@ -15,6 +15,7 @@ import org.koin.android.ext.android.inject
 class AppSettingsFragment : PreferenceFragmentCompat() {
     private val repo: NabtoRepository by inject()
     private val database: DeviceDatabase by inject()
+    private val bookmarks: NabtoBookmarksRepository by inject()
     private val manager: NabtoConnectionManager by inject()
     private val auth: LoginProvider by inject()
 
@@ -80,7 +81,7 @@ class AppSettingsFragment : PreferenceFragmentCompat() {
                     
                     ${context.getString(R.string.app_name)} version ${getAppVersion()}
                     Nabto Client SDK version ${repo.getClientVersion()}
-                    Edge-Client-Android version ${BuildConfig.NABTO_WRAPPER_VERSION}
+                    Edge-Client-Android version
                     
                 """.trimIndent()
             },
@@ -94,8 +95,9 @@ class AppSettingsFragment : PreferenceFragmentCompat() {
                 onDialogClosed = { confirmed ->
                     if (confirmed) {
                         lifecycleScope.launch {
+                            bookmarks.release()
                             auth.logout()
-                            findNavController().navigateAndPopUpToRoute(AppRoute.login(), true)
+                            findNavController().navigateAndClearBackStack(AppRoute.login())
                         }
                     }
                 }

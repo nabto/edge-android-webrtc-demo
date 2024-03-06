@@ -20,6 +20,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
 import androidx.navigation.NavDeepLinkRequest
 import androidx.navigation.fragment.findNavController
+import androidx.navigation.navOptions
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -171,8 +172,10 @@ class HomeFragment : Fragment(), MenuProvider {
         } else if (status == BookmarkStatus.WRONG_FINGERPRINT) {
             view?.snack("Fingerprint is different from expected! Please delete and redo pairing if this is deliberate.")
         } else if (status == BookmarkStatus.ONLINE) {
-            bookmarks.releaseExcept(setOf(device))
-            findNavController().navigate(AppRoute.appDevicePage(device.productId, device.deviceId))
+            bookmarks.disconnectBookmarksExcept(setOf(device))
+            findNavController().navigate(
+                AppRoute.appDevicePage(device.productId, device.deviceId)
+            )
         } else {
             view?.snack("Device is offline. Attempting refresh.")
             // @TODO: send us into the device page if the connection succeeds.

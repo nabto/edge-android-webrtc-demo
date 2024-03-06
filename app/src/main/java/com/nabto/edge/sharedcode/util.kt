@@ -15,6 +15,8 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
+import androidx.navigation.NavOptions
+import androidx.navigation.fragment.findNavController
 import androidx.navigation.navOptions
 import androidx.preference.DialogPreference
 import androidx.preference.Preference
@@ -88,6 +90,13 @@ fun NavController.navigateAndPopUpToRoute(route: String, inclusive: Boolean = fa
     navigate(route, navOptions {
         popUpTo(id) { this.inclusive = inclusive }
     })
+}
+
+fun NavController.navigateAndClearBackStack(route: String) {
+    navigate(
+        route,
+        NavOptions.Builder().setPopUpTo(this.graph.id, true).build()
+    )
 }
 
 /**

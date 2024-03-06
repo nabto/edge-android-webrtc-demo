@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.asFlow
+import com.amplifyframework.auth.AuthException
 import com.nabto.edge.iamutil.IamException
 import com.nabto.edge.iamutil.IamUtil
 import kotlinx.coroutines.CoroutineScope
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -48,11 +50,11 @@ data class CloudDevice(
 
 interface NabtoBookmarksRepository {
     fun getDevices(): Flow<List<DeviceBookmark>?>
-
     fun getStatus(device: Device): BookmarkStatus
-
+    fun getFriendlyName(device: Device): String
     fun release()
-    fun releaseExcept(devices: Set<Device>)
+    //fun releaseExcept(devices: Set<Device>)
+    fun disconnectBookmarksExcept(devices: Set<Device>)
     fun refresh()
 }
 
@@ -74,11 +76,12 @@ class NabtoBookmarksRepositoryImpl(
     data class BookmarkData(
         val handle: ConnectionHandle,
         var status: BookmarkStatus,
-        val job: Job
+        val job: Job,
+        val name: String
     )
 
     private val bookmarks = mutableMapOf<Device, BookmarkData>()
-    private val updateFlow = MutableStateFlow<List<Device>>(listOf())
+    private val updateFlow = MutableSharedFlow<List<Device>>()
 
     private val json = Json { ignoreUnknownKeys = true }
     private val httpClient = OkHttpClient()
@@ -107,7 +110,8 @@ class NabtoBookmarksRepositoryImpl(
         }
 
         scope.launch {
-            updateFlow.collect() { after ->
+            updateFlow.collect { after ->
+                Log.i(TAG, "Received new devices in update: ${after.size}")
                 val before = bookmarks.keys
                 val added = after - before
                 val removed = before - after.toSet()
@@ -117,6 +121,7 @@ class NabtoBookmarksRepositoryImpl(
 
                     val job = scope.launch {
                         manager.getConnectionState(handle)?.asFlow()?.collect { state ->
+                            Log.i("TEST", "Updating device state...")
                             bookmarks[dev]?.let { data ->
                                 data.status = when (state) {
                                     NabtoConnectionState.CLOSED -> BookmarkStatus.OFFLINE
@@ -133,7 +138,8 @@ class NabtoBookmarksRepositoryImpl(
                     bookmarks[dev] = BookmarkData(
                         handle = handle,
                         status = BookmarkStatus.OFFLINE,
-                        job = job
+                        job = job,
+                        name = dev.friendlyName
                     )
 
                     manager.connect(handle)
@@ -164,11 +170,17 @@ class NabtoBookmarksRepositoryImpl(
             )
         }
 
+        Log.i(TAG, "updateCloudDevices: ${devs.size}")
         updateFlow.emit(devs)
     }
 
     private suspend fun getDevicesFromCloudService(): List<CloudDevice> {
-        val user = provider.getLoggedInUser()
+        val user = try {
+            provider.getLoggedInUser()
+        } catch (exception: AuthException) {
+            return listOf()
+        }
+
         Log.i(TAG, "Getting devices...")
         val request = Request.Builder().run {
             url("$cloudServiceUrl/webrtc/devices")
@@ -231,6 +243,9 @@ class NabtoBookmarksRepositoryImpl(
         return bookmarks[device]?.status ?: BookmarkStatus.OFFLINE
     }
 
+    override fun getFriendlyName(device: Device): String {
+        return bookmarks[device]?.name ?: "Unknown device"
+    }
 
     override fun refresh() {
         scope.launch {
@@ -245,11 +260,13 @@ class NabtoBookmarksRepositoryImpl(
         for ((_, data) in bookmarks) {
             manager.releaseHandle(data.handle)
         }
+        bookmarks.clear()
     }
-    override fun releaseExcept(devices: Set<Device>) {
+
+    override fun disconnectBookmarksExcept(devices: Set<Device>) {
         for ((dev, data) in bookmarks) {
             if (!devices.contains(dev)) {
-                manager.releaseHandle(data.handle)
+                manager.disconnect(data.handle)
             }
         }
     }

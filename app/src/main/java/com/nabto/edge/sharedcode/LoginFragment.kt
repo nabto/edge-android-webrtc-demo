@@ -151,11 +151,7 @@ class LoginFragment : Fragment() {
                         loadingProgressBar.visibility = View.GONE
                         when (loginResult) {
                             is LoginResult.Success -> {
-                                findNavController().navigate(
-                                    AppRoute.home(),
-                                    NavOptions.Builder().setPopUpTo(findNavController().graph.startDestinationId, true).build()
-                                )
-
+                                findNavController().navigateAndClearBackStack(AppRoute.home())
                             }
 
                             is LoginResult.Error -> {
