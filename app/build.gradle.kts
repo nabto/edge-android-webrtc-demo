@@ -16,6 +16,7 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 33
+        versionCode = 1
         buildConfigField("String", "NABTO_WRAPPER_VERSION", "\"${nabtoWrapperVersion}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
