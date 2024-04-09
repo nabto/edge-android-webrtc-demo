@@ -8,7 +8,7 @@
 
     <fragment
         android:id="@+id/pairLandingFragment"
-        android:name="com.nabto.edge.sharedcode.PairLandingFragment"
+        android:name="com.nabto.edge.webrtcdemo.PairLandingFragment"
         android:label="@string/title_pairing_landing"
         tools:layout="@layout/fragment_pair_landing" >
         <action
@@ -18,14 +18,14 @@
 
     <fragment
         android:id="@+id/pairNewFragment"
-        android:name="com.nabto.edge.sharedcode.PairNewFragment"
+        android:name="com.nabto.edge.webrtcdemo.PairNewFragment"
         android:label="@string/title_pair_new"
         tools:layout="@layout/fragment_pair_new" >
     </fragment>
 
     <fragment
         android:id="@+id/pairDeviceFragment"
-        android:name="com.nabto.edge.sharedcode.PairDeviceFragment"
+        android:name="com.nabto.edge.webrtcdemo.PairDeviceFragment"
         app:route="pair_device/{productId}/{deviceId}?password={password}&amp;sct={sct}"
         android:label="Pair with {deviceId}">
         <argument android:name="productId"

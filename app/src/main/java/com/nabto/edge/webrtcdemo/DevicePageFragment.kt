@@ -1,6 +1,5 @@
-package com.nabto.edge.sharedcode
+package com.nabto.edge.webrtcdemo
 
-import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater

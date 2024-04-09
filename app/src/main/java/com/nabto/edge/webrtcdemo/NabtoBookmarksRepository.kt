@@ -1,8 +1,6 @@
-package com.nabto.edge.sharedcode
+package com.nabto.edge.webrtcdemo
 
 import android.util.Log
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.asFlow
 import com.amplifyframework.auth.AuthException
 import com.nabto.edge.iamutil.IamException
@@ -18,11 +16,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.ConcurrentHashMap
 
 enum class BookmarkStatus {
     ONLINE,

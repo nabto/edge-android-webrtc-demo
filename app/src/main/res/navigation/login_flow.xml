@@ -7,6 +7,6 @@
 
     <fragment
         android:id="@+id/navLoginFragment"
-        android:name="com.nabto.edge.sharedcode.LoginFragment"
+        android:name="com.nabto.edge.webrtcdemo.LoginFragment"
         android:label="Login"/>
 </navigation>

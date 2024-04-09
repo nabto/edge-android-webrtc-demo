@@ -1,38 +1,24 @@
-package com.nabto.edge.sharedcode
+package com.nabto.edge.webrtcdemo
 
-import android.app.AlertDialog
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import android.view.*
 import android.widget.Button
-import android.widget.EditText
 import android.widget.ImageView
-import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
-import androidx.core.os.bundleOf
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.findFragment
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
-import androidx.navigation.NavDeepLinkRequest
 import androidx.navigation.fragment.findNavController
-import androidx.navigation.navOptions
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.progressindicator.CircularProgressIndicator
-import com.nabto.edge.iamutil.IamException
-import com.nabto.edge.iamutil.IamUtil
-import com.nabto.edge.iamutil.ktx.awaitIsCurrentUserPaired
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
-import com.nabto.edge.sharedcode.*
-import kotlinx.coroutines.Dispatchers
+import com.nabto.edge.webrtcdemo.*
 
 private object DeviceMenu {
     const val EDIT = 0

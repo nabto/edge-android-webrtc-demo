@@ -1,31 +1,24 @@
-package com.nabto.edge.sharedcode
+package com.nabto.edge.webrtcdemo
 
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
-import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
-import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.fragment.findNavController
-import androidx.navigation.navOptions
-import com.nabto.edge.client.Connection
 import com.nabto.edge.client.ErrorCode
 import com.nabto.edge.client.ErrorCodes
-import com.nabto.edge.client.NabtoNoChannelsException
 import com.nabto.edge.client.NabtoRuntimeException
 import com.nabto.edge.iamutil.*
 import com.nabto.edge.iamutil.ktx.*
-import com.nabto.edge.sharedcode.databinding.FragmentPairDeviceBinding
+import com.nabto.edge.webrtcdemo.databinding.FragmentPairDeviceBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
 
 private class PairDeviceViewModelFactory(

@@ -1,8 +1,6 @@
-package com.nabto.edge.sharedcode
+package com.nabto.edge.webrtcdemo
 
 import android.os.Bundle
-import android.util.Log
-import android.util.Patterns
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,26 +13,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavOptions
-import androidx.navigation.fragment.NavHostFragment.Companion.findNavController
 import androidx.navigation.fragment.findNavController
-import com.amplifyframework.auth.AuthException
-import com.amplifyframework.auth.CognitoCredentialsProvider
-import com.amplifyframework.auth.cognito.AWSCognitoAuthSession
-import com.amplifyframework.auth.result.AuthSessionResult
-import com.amplifyframework.kotlin.core.Amplify
-import com.nabto.edge.sharedcode.databinding.FragmentLoginBinding
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
+import com.nabto.edge.webrtcdemo.databinding.FragmentLoginBinding
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.koin.android.ext.android.inject
-import retrofit2.Call
-import retrofit2.Retrofit
-import retrofit2.http.GET
-import retrofit2.http.Header
 import java.lang.IllegalStateException
 
 data class LoginFormErrorState(

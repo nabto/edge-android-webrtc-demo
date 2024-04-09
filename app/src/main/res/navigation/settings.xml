@@ -8,6 +8,6 @@
 
     <fragment
         android:id="@+id/appSettingsFragment"
-        android:name="com.nabto.edge.sharedcode.AppSettingsFragment"
+        android:name="com.nabto.edge.webrtcdemo.AppSettingsFragment"
         android:label="@string/title_app_settings" />
 </navigation>

@@ -1,4 +1,4 @@
-package com.nabto.edge.sharedcode
+package com.nabto.edge.webrtcdemo
 
 private class RouteBuilder(val root: String) {
     private val pathSegments: MutableList<String> = mutableListOf()

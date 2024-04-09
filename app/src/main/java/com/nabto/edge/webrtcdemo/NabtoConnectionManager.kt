@@ -1,4 +1,4 @@
-package com.nabto.edge.sharedcode
+package com.nabto.edge.webrtcdemo
 
 import android.net.ConnectivityManager
 import android.net.Network

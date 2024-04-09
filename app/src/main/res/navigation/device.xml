@@ -5,5 +5,5 @@
     app:startDestination="@id/devicePageFragment">
     <fragment
         android:id="@+id/devicePageFragment"
-        android:name="com.nabto.edge.sharedcode.DevicePageFragment"/>
+        android:name="com.nabto.edge.webrtcdemo.DevicePageFragment"/>
 </navigation>

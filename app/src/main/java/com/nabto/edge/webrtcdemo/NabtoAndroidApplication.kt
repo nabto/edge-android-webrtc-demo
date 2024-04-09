@@ -1,4 +1,4 @@
-package com.nabto.edge.sharedcode
+package com.nabto.edge.webrtcdemo
 
 import android.app.Application
 import android.content.Context

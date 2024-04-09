@@ -11,7 +11,7 @@ val nabtoWrapperVersion = "webrtc-SNAPSHOT"
 
 android {
     compileSdk = 33
-    namespace = "com.nabto.edge.sharedcode"
+    namespace = "com.nabto.edge.webrtcdemo"
 
     defaultConfig {
         minSdk = 26
@@ -30,6 +30,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

@@ -7,7 +7,7 @@
     app:startDestination="@id/homeFragment">
     <fragment
         android:id="@+id/homeFragment"
-        android:name="com.nabto.edge.sharedcode.HomeFragment"
+        android:name="com.nabto.edge.webrtcdemo.HomeFragment"
         android:label="@string/title_home"
         tools:layout="@layout/fragment_home" >
     </fragment>
