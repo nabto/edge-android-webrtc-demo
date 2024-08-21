@@ -18,10 +18,10 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        versionCode = 2
         buildConfigField("String", "NABTO_WRAPPER_VERSION", "\"${nabtoWrapperVersion}\"")
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "androidx.test.runneqr.AndroidJUnitRunner"
         // consumerProguardFiles("consumer-rules.pro")
     }
 
@@ -57,9 +57,14 @@ android {
 }
 
 dependencies {
+    // Google play libraries
+    implementation ("com.google.android.play:asset-delivery:2.2.2")
+    implementation ("com.google.android.play:app-update:2.1.0")
+    implementation ("com.google.android.gms:play-services-tasks:18.2.0")
+    implementation ("com.google.android.play:feature-delivery:2.1.0")
+
     // Android dependencies
     implementation ("androidx.core:core-ktx:1.13.1")
-    implementation ("androidx.appcompat:appcompat:1.7.0")
     implementation ("com.google.android.material:material:1.12.0")
     implementation ("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation ("androidx.navigation:navigation-fragment-ktx:2.7.7")
@@ -83,7 +88,6 @@ dependencies {
     implementation ("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.6.2")
     implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation ("androidx.annotation:annotation:1.8.2")
     implementation ("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.4")
     implementation ("androidx.lifecycle:lifecycle-process:2.8.4")
 
@@ -102,7 +106,7 @@ dependencies {
     testImplementation ("io.insert-koin:koin-test:$koinVersion")
 
     // Amplify for Cognito integration
-    val amplifyVersion = "2.13.2"
+    val amplifyVersion = "2.21.0"
     implementation ("com.amplifyframework:core-kotlin:$amplifyVersion")
     implementation ("com.amplifyframework:aws-auth-cognito:$amplifyVersion")
 
