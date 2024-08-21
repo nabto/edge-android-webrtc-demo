@@ -7,7 +7,9 @@ plugins {
 }
 
 // We keep this here so it can be exposed to BuildConfig.
-val nabtoWrapperVersion = "webrtc-SNAPSHOT"
+val nabtoWrapperVersion = "3.0.1"
+val webrtcVersion = "main-SNAPSHOT"
+
 
 android {
     compileSdk = 33
@@ -74,7 +76,7 @@ dependencies {
     implementation ("com.nabto.edge.client:library-ktx:$nabtoWrapperVersion")
     implementation ("com.nabto.edge.client:iam-util:$nabtoWrapperVersion")
     implementation ("com.nabto.edge.client:iam-util-ktx:$nabtoWrapperVersion")
-    implementation ("com.nabto.edge.client:webrtc:$nabtoWrapperVersion")
+    implementation ("com.nabto.edge.client:webrtc:$webrtcVersion")
 
     // Kotlin dependencies
     implementation ("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
