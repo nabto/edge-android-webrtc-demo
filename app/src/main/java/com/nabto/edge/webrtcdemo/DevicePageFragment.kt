@@ -45,7 +45,7 @@ sealed class Error {
     data object authFailed : Error()
     data object notLoggedIn : Error()
     data object videoCallFailed : Error()
-    data class peerConnectionError(val err: EdgeWebRTCError) : Error()
+    data class peerConnectionError(val err: EdgeWebrtcError) : Error()
 }
 
 class DevicePageViewModel : ViewModel() {
@@ -119,25 +119,10 @@ class DevicePageViewModel : ViewModel() {
     }
 
     fun openVideoStream(conn: Connection) {
-        peerConnection = EdgeWebRTCManager.getInstance().createRTCConnection(conn)
+        peerConnection = EdgeWebrtcManager.getInstance().createRTCConnection(conn)
         val connRef = WeakReference(conn)
 
-        peerConnection.onConnected {
-            Log.i(tag, "Connected to peer")
-            val trackInfo = """{"tracks": ["frontdoor-video", "frontdoor-audio"]}"""
-
-            val coap = connRef.get()?.createCoap("POST", "/webrtc/tracks")
-            coap?.setRequestPayload(50, trackInfo.toByteArray())
-            coap?.execute()
-
-            if (coap?.responseStatusCode != 201) {
-                viewModelScope.launch {
-                    _errors.emit(Error.videoCallFailed)
-                }
-            }
-        }
-
-        peerConnection.onTrack {track ->
+        peerConnection.onTrack { track, _ ->
             Log.i(tag, "Track of type ${track.type}")
             if (track.type == EdgeMediaTrackType.VIDEO) {
                 remoteTrack = track as EdgeVideoTrack
@@ -151,7 +136,20 @@ class DevicePageViewModel : ViewModel() {
             }
         }
 
-        peerConnection.connect()
+        peerConnection.connect().whenComplete { _, _ ->
+            Log.i(tag, "Connected to peer")
+            val trackInfo = """{"tracks": ["frontdoor-video", "frontdoor-audio"]}"""
+
+            val coap = connRef.get()?.createCoap("POST", "/webrtc/tracks")
+            coap?.setRequestPayload(50, trackInfo.toByteArray())
+            coap?.execute()
+
+            if (coap?.responseStatusCode != 201) {
+                viewModelScope.launch {
+                    _errors.emit(Error.videoCallFailed)
+                }
+            }
+        }
     }
 
     fun closeVideoStream() {
@@ -181,7 +179,7 @@ class DevicePageFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         val deviceHandle = manager.requestConnection(Device(productId, deviceId))
         val videoView = view.findViewById<EdgeVideoView>(R.id.participantVideoRenderer)
-        EdgeWebRTCManager.getInstance().initVideoView(videoView)
+        EdgeWebrtcManager.getInstance().initVideoView(videoView)
         requireAppActivity().actionBarTitle = deviceName
 
         lifecycleScope.launch {
