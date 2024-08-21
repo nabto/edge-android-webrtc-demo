@@ -21,7 +21,7 @@ android {
         versionCode = 2
         buildConfigField("String", "NABTO_WRAPPER_VERSION", "\"${nabtoWrapperVersion}\"")
 
-        testInstrumentationRunner = "androidx.test.runneqr.AndroidJUnitRunner"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // consumerProguardFiles("consumer-rules.pro")
     }
 
