@@ -72,20 +72,6 @@ fun Fragment.clearFocusAndHideKeyboard() {
     }
 }
 
-/**
- * This function is meant to achieve the same as calling navigate with inclusive popUpTo
- * Using navigate in that way seems to be currently bugged, so we have our own
- * slightly hacky alternative here.
- */
-fun NavController.navigateAndPopUpToRoute(route: String, inclusive: Boolean = false) {
-    Log.i("NavController", backQueue.map{ it.destination.route }.joinToString())
-    val entry = backQueue.last { it.destination.route == route }
-    val id = entry.destination.id
-    navigate(route, navOptions {
-        popUpTo(id) { this.inclusive = inclusive }
-    })
-}
-
 fun NavController.navigateAndClearBackStack(route: String) {
     navigate(
         route,
