@@ -27,8 +27,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.koin.android.ext.android.inject
 import com.nabto.edge.client.webrtc.*
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.future.await
 import java.io.IOException
 import java.lang.ref.WeakReference
 
@@ -118,7 +120,7 @@ class DevicePageViewModel : ViewModel() {
         return true
     }
 
-    fun openVideoStream(conn: Connection) {
+    suspend fun openVideoStream(conn: Connection) {
         peerConnection = EdgeWebrtcManager.getInstance().createRTCConnection(conn)
         val connRef = WeakReference(conn)
 
@@ -136,18 +138,17 @@ class DevicePageViewModel : ViewModel() {
             }
         }
 
-        peerConnection.connect().whenComplete { _, _ ->
-            Log.i(tag, "Connected to peer")
-            val trackInfo = """{"tracks": ["frontdoor-video", "frontdoor-audio"]}"""
+        peerConnection.connect().await()
+        Log.i(tag, "Connected to peer")
+        val trackInfo = """{"tracks": ["frontdoor-video", "frontdoor-audio"]}"""
 
-            val coap = connRef.get()?.createCoap("POST", "/webrtc/tracks")
-            coap?.setRequestPayload(50, trackInfo.toByteArray())
-            coap?.execute()
+        val coap = connRef.get()?.createCoap("POST", "/webrtc/tracks")
+        coap?.setRequestPayload(50, trackInfo.toByteArray())
+        coap?.execute()
 
-            if (coap?.responseStatusCode != 201) {
-                viewModelScope.launch {
-                    _errors.emit(Error.videoCallFailed)
-                }
+        if (coap?.responseStatusCode != 201) {
+            viewModelScope.launch {
+                _errors.emit(Error.videoCallFailed)
             }
         }
     }

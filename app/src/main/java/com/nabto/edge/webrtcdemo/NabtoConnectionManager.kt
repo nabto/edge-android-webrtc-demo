@@ -209,16 +209,6 @@ class NabtoConnectionManagerImpl(
 
     init {
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
-
-        connectivityManager.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                onNetworkAvailable(network)
-            }
-
-            override fun onLost(network: Network) {
-                onNetworkLost(network)
-            }
-        })
     }
 
     override fun subscribe(handle: ConnectionHandle, listener: ConnectionEventListener) {
