@@ -3,7 +3,8 @@ plugins {
     id("com.android.application") version "8.3.2" apply false
     id("com.android.library") version "8.3.2" apply false
     id("org.jetbrains.kotlin.android") version "1.6.21" apply false
-    kotlin("jvm") version "1.7.0"
+    id("com.google.devtools.ksp") version "2.1.10-1.0.31" apply false
+    kotlin("jvm") version "2.1.10" apply false
     kotlin("plugin.serialization") version "1.9.0"
 }
 

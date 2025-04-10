@@ -5,6 +5,7 @@ import androidx.lifecycle.asFlow
 import com.amplifyframework.auth.AuthException
 import com.nabto.edge.iamutil.IamException
 import com.nabto.edge.iamutil.IamUtil
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,8 +18,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+import okio.IOException
+import kotlin.coroutines.suspendCoroutine
 
 enum class BookmarkStatus {
     ONLINE,
@@ -185,15 +191,20 @@ class NabtoBookmarksRepositoryImpl(
         }
 
         return withContext(Dispatchers.IO) {
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    Log.e(TAG, "Cloud service gave unexpected response $response")
-                    listOf<CloudDevice>()
-                } else {
-                    val body = response.body.string()
-                    Log.i(TAG, body);
-                    json.decodeFromString<List<CloudDevice>>(body)
+            try {
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.e(TAG, "Cloud service gave unexpected response $response")
+                        listOf()
+                    } else {
+                        val body = response.body.string()
+                        Log.i(TAG, body);
+                        json.decodeFromString<List<CloudDevice>>(body)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, e.toString())
+                listOf()
             }
         }
     }
